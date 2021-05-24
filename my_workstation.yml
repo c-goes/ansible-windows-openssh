@@ -1,0 +1,101 @@
+---
+- hosts: windows
+  vars:
+    allow_windows_reboot_during_win_updates: True
+    common_windows_packages:
+      - 7zip.install
+      - conemu
+      - doublecmd
+      - notepadplusplus.install
+      - putty.install
+      - winscp
+      - vscode
+      - microsoft-windows-terminal
+  tasks:
+
+    - name: Enable Remote Desktop
+      win_regedit:
+        key: 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+        value: fDenyTSConnections
+        data: 0
+        datatype: dword
+
+    - name: Enable Network Level Authentication
+      win_regedit:
+        key: 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+        value: UserAuthentication
+        data: 1
+        datatype: dword
+
+    - name: Allow blank passwords to login (this is needed for RDP over SSH without password)
+      win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+        name: "LimitBlankPasswordUse"
+        data: 0
+        type: dword
+
+    - name: Show file extensions in Explorer
+      win_regedit:
+        path: 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        name: HideFileExt
+        data: 0
+        type: dword
+
+    - name: Show hidden files
+      win_regedit:
+        path: 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        name: "{{ item }}"
+        data: 1
+        type: dword
+      loop:
+        - Hidden
+        - SuperHidden
+
+    - name: Disable Hibernate Mode
+      win_command: powercfg -h off
+      changed_when: false
+      when: ansible_distribution is search("Microsoft Windows 10")
+
+
+    - name: Install applications
+      win_chocolatey:
+        name: "{{ common_windows_packages }}"
+      register: result
+      until: result is succeeded
+
+
+    - name: Install VirtualBox for personal use only
+      win_chocolatey:
+        name: virtualbox
+        package_params: /ExtensionPack
+
+
+
+    - name: Enable telnet
+      win_feature:
+        name: telnet-client
+      when: ansible_distribution is not search("Microsoft Windows 10")
+
+    # - name: Install windows updates
+    #   win_updates:
+    #     category_names:
+    #       - Application
+    #       - Connectors
+    #       - CriticalUpdates
+    #       - DefinitionUpdates
+    #       - DeveloperKits
+    #       - FeaturePacks
+    #       - Guidance
+    #       - SecurityUpdates
+    #       - ServicePacks
+    #       - Tools
+    #       - UpdateRollups
+    #       - Updates
+    #     reboot: yes
+    #     reboot_timeout: 10000
+    #   register: windows_updates
+
+    # - name: Windows reboot
+    #   win_reboot:
+    #     reboot_timeout: 10000
+    #   when: windows_updates.reboot_required and allow_windows_reboot_during_win_updates
